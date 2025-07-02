@@ -1,0 +1,133 @@
+# Sample CAN ID List for Perfect Hash Generation
+# ==============================================
+# 
+# Format: One CAN ID per line
+# Supported formats:
+#   - Hexadecimal: 0x123, 0X456
+#   - Decimal: 291, 1110
+#   - Comma-separated: 0x123, 0x456, 0x789
+#
+# Lines starting with # are comments
+#
+
+# Engine ECU (0x100-0x1FF)
+0x100  # Engine RPM
+0x101  # Engine Load
+0x102  # Throttle Position
+0x103  # Engine Temperature
+0x104  # Engine Oil Pressure
+0x105  # Engine Oil Temperature
+0x106  # Fuel Consumption
+0x107  # Engine Hours
+0x108  # Engine Fault Status
+0x109  # Engine Performance Data
+
+# Transmission ECU (0x200-0x2FF)
+0x200  # Gear Position
+0x201  # Transmission Temperature
+0x202  # Transmission Pressure
+0x203  # Clutch Status
+0x204  # Transmission Fault
+0x205  # Shift Request
+0x206  # Torque Converter Status
+0x207  # Transmission Mode
+
+# Body ECU (0x300-0x3FF)
+0x300  # Door Status
+0x301  # Window Status
+0x302  # Light Status
+0x303  # Lock Status
+0x304  # Mirror Position
+0x305  # Seat Position
+0x306  # Sunroof Status
+0x307  # Wiper Status
+0x308  # Horn Status
+0x309  # Security Status
+
+# ABS/ESP ECU (0x400-0x4FF)
+0x400  # Wheel Speed FL
+0x401  # Wheel Speed FR
+0x402  # Wheel Speed RL
+0x403  # Wheel Speed RR
+0x404  # Brake Pressure
+0x405  # ABS Status
+0x406  # ESP Status
+0x407  # Steering Angle
+0x408  # Lateral Acceleration
+0x409  # Yaw Rate
+
+# HVAC ECU (0x500-0x5FF)
+0x500  # Cabin Temperature
+0x501  # Outside Temperature
+0x502  # AC Status
+0x503  # Fan Speed
+0x504  # Air Distribution
+0x505  # Heater Status
+0x506  # Defrost Status
+0x507  # Air Quality
+0x508  # Humidity Level
+
+# Instrument Cluster (0x600-0x6FF)
+0x600  # Speed
+0x601  # Odometer
+0x602  # Trip Meter
+0x603  # Fuel Level
+0x604  # Fuel Range
+0x605  # Warning Lights
+0x606  # Display Mode
+0x607  # Brightness Level
+0x608  # Language Setting
+0x609  # Unit Settings
+
+# Gateway ECU (0x700-0x7FF)
+0x700  # Network Status
+0x701  # Gateway Diagnostics
+0x702  # Message Routing
+0x703  # Bus Load
+0x704  # Error Statistics
+0x705  # Wake-up Events
+0x706  # Sleep Status
+0x707  # Security Events
+
+# Extended CAN IDs (29-bit)
+# UDS Diagnostic Messages
+0x18DA10F1  # ECU 1 Diagnostic Request
+0x18DA11F1  # ECU 2 Diagnostic Request
+0x18DA12F1  # ECU 3 Diagnostic Request
+0x18DA13F1  # ECU 4 Diagnostic Request
+0x18DA14F1  # ECU 5 Diagnostic Request
+
+# UDS Diagnostic Responses
+0x18DAF110  # ECU 1 Diagnostic Response
+0x18DAF111  # ECU 2 Diagnostic Response
+0x18DAF112  # ECU 3 Diagnostic Response
+0x18DAF113  # ECU 4 Diagnostic Response
+0x18DAF114  # ECU 5 Diagnostic Response
+
+# J1939 Protocol (Truck/Heavy Vehicle)
+0x18FEF100  # Electronic Engine Controller 1
+0x18FEF200  # Electronic Engine Controller 2
+0x18FEE100  # Electronic Engine Controller 3
+0x18FEDF00  # Electronic Brake Controller 1
+0x18FECA00  # Vehicle Position
+0x18FEC100  # Vehicle Distance
+0x18FEE000  # Engine Hours, Revolutions
+0x18FEEE00  # Engine Fluid Level/Pressure 1
+
+# AUTOSAR CAN TP (Transport Protocol)
+0x18DB33F1  # Multi-frame message flow control
+0x18DA33F1  # Multi-frame message data
+
+# OEM Specific Range (Example: Toyota)
+0x1C400000  # OEM Proprietary 1
+0x1C400001  # OEM Proprietary 2
+0x1C400002  # OEM Proprietary 3
+0x1C400003  # OEM Proprietary 4
+0x1C400004  # OEM Proprietary 5
+
+# Additional standard CAN IDs for testing collision patterns
+0x123, 0x456, 0x789, 0xABC, 0xDEF
+0x321, 0x654, 0x987, 0xCBA, 0xFED
+0x111, 0x222, 0x333, 0x444, 0x555
+0x666, 0x777, 0x888, 0x999, 0xAAA
+0xBBB, 0xCCC, 0xDDD, 0xEEE, 0xFFF

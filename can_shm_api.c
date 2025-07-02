@@ -11,9 +11,9 @@
 #include <pthread.h>
 
 // グローバル変数
-static SharedMemoryLayout* g_shm_ptr = NULL;
+SharedMemoryLayout* g_shm_ptr = NULL;
 static int g_shm_fd = -1;
-static int g_is_initialized = 0;
+int g_is_initialized = 0;
 
 // タイムスタンプ取得（ナノ秒）
 static uint64_t get_timestamp_ns(void) {

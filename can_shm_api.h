@@ -8,6 +8,10 @@
 extern "C" {
 #endif
 
+// グローバル変数（外部参照用）
+extern SharedMemoryLayout* g_shm_ptr;
+extern int g_is_initialized;
+
 /**
  * 共有メモリシステム初期化
  * @return CAN_SHM_SUCCESS on success, error code on failure

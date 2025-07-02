@@ -17,6 +17,8 @@ endif()
 # ライブラリターゲット
 add_library(can_shm SHARED
     can_shm_api.c
+    can_shm_linear_probing.c
+    can_shm_perfect_hash.c
 )
 
 target_link_libraries(can_shm 
@@ -39,14 +41,38 @@ target_link_libraries(test_can_shm
     ${RT_LIBRARY}
 )
 
+# 完全ハッシュテスト実行可能ファイル
+add_executable(test_perfect_hash
+    test_perfect_hash.c
+)
+
+target_link_libraries(test_perfect_hash
+    can_shm
+    Threads::Threads
+    ${RT_LIBRARY}
+)
+
+# リニアプロービングテスト実行可能ファイル
+add_executable(test_linear_probing
+    test_linear_probing.c
+)
+
+target_link_libraries(test_linear_probing
+    can_shm
+    Threads::Threads
+    ${RT_LIBRARY}
+)
+
 # テスト用のカスタムターゲット
 enable_testing()
 add_test(NAME can_shm_tests COMMAND test_can_shm)
+add_test(NAME perfect_hash_tests COMMAND test_perfect_hash)
+add_test(NAME linear_probing_tests COMMAND test_linear_probing)
 
 # カスタムターゲット：テスト実行
 add_custom_target(run_tests
     COMMAND ${CMAKE_CTEST_COMMAND} --verbose
-    DEPENDS test_can_shm
+    DEPENDS test_can_shm test_perfect_hash test_linear_probing
     COMMENT "Running CAN shared memory tests"
 )
 
