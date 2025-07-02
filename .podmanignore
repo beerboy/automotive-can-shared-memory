@@ -1,0 +1,23 @@
+# Build artifacts
+build/
+*.o
+*.so
+*.dylib
+test_can_shm
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!REQUIREMENT.md
+
+# Logs
+*.log

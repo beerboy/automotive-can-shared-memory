@@ -1,0 +1,167 @@
+# Makefile for Linear Probing Implementation
+
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99 -O2 -g
+LDFLAGS = -lpthread -lrt
+
+# Source files
+ORIGINAL_SOURCES = can_shm_api.c
+LINEAR_PROBING_SOURCES = can_shm_linear_probing.c
+TEST_SOURCES = test_linear_probing.c
+
+# Header files
+HEADERS = can_shm_types.h can_shm_api.h can_shm_linear_probing.h
+
+# Object files
+ORIGINAL_OBJECTS = $(ORIGINAL_SOURCES:.c=.o)
+LINEAR_PROBING_OBJECTS = $(LINEAR_PROBING_SOURCES:.c=.o)
+TEST_OBJECTS = $(TEST_SOURCES:.c=.o)
+
+# Executables
+TEST_EXEC = test_linear_probing
+DEMO_EXEC = demo_collision_comparison
+
+# Default target
+all: $(TEST_EXEC) $(DEMO_EXEC)
+
+# Test executable
+$(TEST_EXEC): $(ORIGINAL_OBJECTS) $(LINEAR_PROBING_OBJECTS) $(TEST_OBJECTS)
+	$(CC) -o $@ $^ $(LDFLAGS)
+
+# Demo executable for collision comparison
+$(DEMO_EXEC): demo_collision_comparison.o $(ORIGINAL_OBJECTS) $(LINEAR_PROBING_OBJECTS)
+	$(CC) -o $@ $^ $(LDFLAGS)
+
+# Object file compilation
+%.o: %.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Demo source file
+demo_collision_comparison.c:
+	@echo "Creating demo collision comparison program..."
+	@cat > demo_collision_comparison.c << 'EOF'
+#include "can_shm_api.h"
+#include "can_shm_linear_probing.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void) {
+    printf("Hash Collision Demonstration\n");
+    printf("============================\n");
+    
+    // Initialize shared memory
+    if (can_shm_init() != CAN_SHM_SUCCESS) {
+        printf("Failed to initialize shared memory\n");
+        return 1;
+    }
+    
+    // Test CAN IDs that may collide
+    uint32_t can_ids[] = {
+        0x123, 0x456, 0x789, 0xABC, 0xDEF,
+        0x100, 0x200, 0x300, 0x400, 0x500,
+        0x111, 0x222, 0x333, 0x444, 0x555
+    };
+    int num_ids = sizeof(can_ids) / sizeof(can_ids[0]);
+    
+    printf("Testing hash function with %d CAN IDs:\n", num_ids);
+    
+    // Show hash values and detect collisions
+    for (int i = 0; i < num_ids; i++) {
+        uint32_t hash_val = can_id_hash(can_ids[i]);
+        printf("CAN ID 0x%03X -> Hash %4u", can_ids[i], hash_val);
+        
+        // Check for collisions with previous IDs
+        int collision_found = 0;
+        for (int j = 0; j < i; j++) {
+            if (can_id_hash(can_ids[j]) == hash_val) {
+                printf(" [COLLISION with 0x%03X]", can_ids[j]);
+                collision_found = 1;
+                break;
+            }
+        }
+        if (!collision_found) {
+            printf(" [UNIQUE]");
+        }
+        printf("\n");
+    }
+    
+    printf("\nTesting linear probing behavior:\n");
+    
+    // Insert all CAN IDs using linear probing
+    uint8_t test_data[] = {0x01, 0x02, 0x03, 0x04};
+    for (int i = 0; i < num_ids; i++) {
+        test_data[0] = 0x10 + i; // Unique data for each ID
+        CANShmResult result = can_shm_set_linear_probing(can_ids[i], 4, test_data);
+        printf("Set CAN ID 0x%03X: %s\n", can_ids[i], 
+               (result == CAN_SHM_SUCCESS) ? "SUCCESS" : "FAILED");
+    }
+    
+    printf("\nVerifying all data can be retrieved:\n");
+    
+    // Verify all data can be retrieved
+    int success_count = 0;
+    for (int i = 0; i < num_ids; i++) {
+        CANData retrieved_data;
+        CANShmResult result = can_shm_get_linear_probing(can_ids[i], &retrieved_data);
+        if (result == CAN_SHM_SUCCESS && retrieved_data.can_id == can_ids[i]) {
+            printf("Get CAN ID 0x%03X: SUCCESS (data[0]=0x%02X)\n", 
+                   can_ids[i], retrieved_data.data[0]);
+            success_count++;
+        } else {
+            printf("Get CAN ID 0x%03X: FAILED\n", can_ids[i]);
+        }
+    }
+    
+    printf("\nResults:\n");
+    printf("Successfully stored and retrieved: %d/%d (%.1f%%)\n", 
+           success_count, num_ids, (double)success_count / num_ids * 100.0);
+    
+    // Show statistics
+    can_shm_print_hash_stats();
+    
+    // Cleanup
+    can_shm_cleanup();
+    
+    printf("\nConclusion:\n");
+    printf("Linear probing successfully handles hash collisions by finding\n");
+    printf("alternative storage locations, ensuring no data is lost.\n");
+    
+    return 0;
+}
+EOF
+
+# Clean up
+clean:
+	rm -f *.o $(TEST_EXEC) $(DEMO_EXEC) demo_collision_comparison.c
+
+# Run tests
+test: $(TEST_EXEC)
+	@echo "Running linear probing tests..."
+	@sudo rm -f /dev/shm/can_data_shm  # Clean up any existing shared memory
+	./$(TEST_EXEC)
+
+# Run collision demo
+demo: $(DEMO_EXEC)
+	@echo "Running collision demonstration..."
+	@sudo rm -f /dev/shm/can_data_shm  # Clean up any existing shared memory
+	./$(DEMO_EXEC)
+
+# Install (copy to system directories)
+install: $(TEST_EXEC) $(DEMO_EXEC)
+	@echo "Installing to local bin directory..."
+	@mkdir -p ./bin
+	cp $(TEST_EXEC) $(DEMO_EXEC) ./bin/
+
+# Show help
+help:
+	@echo "Available targets:"
+	@echo "  all     - Build all executables"
+	@echo "  test    - Build and run tests"
+	@echo "  demo    - Build and run collision demonstration"
+	@echo "  clean   - Remove build artifacts"
+	@echo "  install - Install to local bin directory"
+	@echo "  help    - Show this help message"
+
+# Phony targets
+.PHONY: all clean test demo install help

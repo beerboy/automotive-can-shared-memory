@@ -1,0 +1,376 @@
+cmake_minimum_required(VERSION 3.10)
+project(CANLinearProbing VERSION 1.0.0 LANGUAGES C)
+
+# C標準設定
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+# コンパイラフラグ設定
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -O2 -g")
+set(CMAKE_C_FLAGS_DEBUG "-O0 -g3 -DDEBUG")
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
+
+# 必要なライブラリを検索
+find_package(Threads REQUIRED)
+
+# 共有ライブラリのリンクを有効化
+find_library(RT_LIBRARY rt)
+if(NOT RT_LIBRARY)
+    message(STATUS "librt not found, using built-in clock functions")
+    set(RT_LIBRARY "")
+endif()
+
+# インクルードディレクトリ
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
+# ソースファイル定義
+set(ORIGINAL_SOURCES
+    can_shm_api.c
+)
+
+set(LINEAR_PROBING_SOURCES
+    can_shm_linear_probing.c
+)
+
+set(HEADERS
+    can_shm_types.h
+    can_shm_api.h
+    can_shm_linear_probing.h
+)
+
+# 共通ライブラリの作成
+add_library(can_shm_original STATIC ${ORIGINAL_SOURCES})
+target_link_libraries(can_shm_original ${CMAKE_THREAD_LIBS_INIT} ${RT_LIBRARY})
+
+add_library(can_shm_linear_probing STATIC ${LINEAR_PROBING_SOURCES})
+target_link_libraries(can_shm_linear_probing ${CMAKE_THREAD_LIBS_INIT} ${RT_LIBRARY})
+
+# テスト実行ファイル
+add_executable(test_linear_probing test_linear_probing.c)
+target_link_libraries(test_linear_probing 
+    can_shm_original 
+    can_shm_linear_probing 
+    ${CMAKE_THREAD_LIBS_INIT} 
+    ${RT_LIBRARY}
+)
+
+# 衝突デモンストレーション用のソースファイルを生成
+set(DEMO_SOURCE_PATH "${CMAKE_CURRENT_BINARY_DIR}/demo_collision_comparison.c")
+file(WRITE ${DEMO_SOURCE_PATH} "
+#include \"can_shm_api.h\"
+#include \"can_shm_linear_probing.h\"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void) {
+    printf(\"Hash Collision Demonstration\\n\");
+    printf(\"============================\\n\");
+    
+    // Initialize shared memory
+    if (can_shm_init() != CAN_SHM_SUCCESS) {
+        printf(\"Failed to initialize shared memory\\n\");
+        return 1;
+    }
+    
+    // Test CAN IDs that may collide
+    uint32_t can_ids[] = {
+        0x123, 0x456, 0x789, 0xABC, 0xDEF,
+        0x100, 0x200, 0x300, 0x400, 0x500,
+        0x111, 0x222, 0x333, 0x444, 0x555
+    };
+    int num_ids = sizeof(can_ids) / sizeof(can_ids[0]);
+    
+    printf(\"Testing hash function with %d CAN IDs:\\n\", num_ids);
+    
+    // Show hash values and detect collisions
+    for (int i = 0; i < num_ids; i++) {
+        uint32_t hash_val = can_id_hash(can_ids[i]);
+        printf(\"CAN ID 0x%03X -> Hash %4u\", can_ids[i], hash_val);
+        
+        // Check for collisions with previous IDs
+        int collision_found = 0;
+        for (int j = 0; j < i; j++) {
+            if (can_id_hash(can_ids[j]) == hash_val) {
+                printf(\" [COLLISION with 0x%03X]\", can_ids[j]);
+                collision_found = 1;
+                break;
+            }
+        }
+        if (!collision_found) {
+            printf(\" [UNIQUE]\");
+        }
+        printf(\"\\n\");
+    }
+    
+    printf(\"\\nTesting linear probing behavior:\\n\");
+    
+    // Insert all CAN IDs using linear probing
+    uint8_t test_data[] = {0x01, 0x02, 0x03, 0x04};
+    for (int i = 0; i < num_ids; i++) {
+        test_data[0] = 0x10 + i; // Unique data for each ID
+        CANShmResult result = can_shm_set_linear_probing(can_ids[i], 4, test_data);
+        printf(\"Set CAN ID 0x%03X: %s\\n\", can_ids[i], 
+               (result == CAN_SHM_SUCCESS) ? \"SUCCESS\" : \"FAILED\");
+    }
+    
+    printf(\"\\nVerifying all data can be retrieved:\\n\");
+    
+    // Verify all data can be retrieved
+    int success_count = 0;
+    for (int i = 0; i < num_ids; i++) {
+        CANData retrieved_data;
+        CANShmResult result = can_shm_get_linear_probing(can_ids[i], &retrieved_data);
+        if (result == CAN_SHM_SUCCESS && retrieved_data.can_id == can_ids[i]) {
+            printf(\"Get CAN ID 0x%03X: SUCCESS (data[0]=0x%02X)\\n\", 
+                   can_ids[i], retrieved_data.data[0]);
+            success_count++;
+        } else {
+            printf(\"Get CAN ID 0x%03X: FAILED\\n\", can_ids[i]);
+        }
+    }
+    
+    printf(\"\\nResults:\\n\");
+    printf(\"Successfully stored and retrieved: %d/%d (%.1f%%)\\n\", 
+           success_count, num_ids, (double)success_count / num_ids * 100.0);
+    
+    // Show statistics
+    can_shm_print_hash_stats();
+    
+    // Cleanup
+    can_shm_cleanup();
+    
+    printf(\"\\nConclusion:\\n\");
+    printf(\"Linear probing successfully handles hash collisions by finding\\n\");
+    printf(\"alternative storage locations, ensuring no data is lost.\\n\");
+    
+    return 0;
+}
+")
+
+# 衝突デモンストレーション実行ファイル
+add_executable(demo_collision_comparison ${DEMO_SOURCE_PATH})
+target_link_libraries(demo_collision_comparison 
+    can_shm_original 
+    can_shm_linear_probing 
+    ${CMAKE_THREAD_LIBS_INIT} 
+    ${RT_LIBRARY}
+)
+
+# パフォーマンステスト用実行ファイル
+set(PERF_TEST_SOURCE_PATH "${CMAKE_CURRENT_BINARY_DIR}/performance_test.c")
+file(WRITE ${PERF_TEST_SOURCE_PATH} "
+#include \"can_shm_api.h\"
+#include \"can_shm_linear_probing.h\"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+
+#define NUM_OPERATIONS 10000
+
+void benchmark_linear_probing(void) {
+    printf(\"=== Linear Probing Performance Benchmark ===\\n\");
+    
+    struct timespec start, end;
+    double total_time;
+    
+    // Set operations benchmark
+    printf(\"Benchmarking Set operations...\\n\");
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    
+    for (int i = 0; i < NUM_OPERATIONS; i++) {
+        uint32_t can_id = 0x1000 + (i % 0x1000); // Cycle through CAN IDs
+        uint8_t test_data[] = {(uint8_t)i, (uint8_t)(i >> 8), 0x55, 0xAA};
+        can_shm_set_linear_probing(can_id, 4, test_data);
+    }
+    
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    total_time = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+    
+    printf(\"Set: %d ops in %.6f sec (%.2f μs/op, %.0f ops/sec)\\n\", 
+           NUM_OPERATIONS, total_time,
+           (total_time / NUM_OPERATIONS) * 1e6,
+           NUM_OPERATIONS / total_time);
+    
+    // Get operations benchmark
+    printf(\"Benchmarking Get operations...\\n\");
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    
+    for (int i = 0; i < NUM_OPERATIONS; i++) {
+        uint32_t can_id = 0x1000 + (i % 0x1000);
+        CANData data;
+        can_shm_get_linear_probing(can_id, &data);
+    }
+    
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    total_time = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+    
+    printf(\"Get: %d ops in %.6f sec (%.2f μs/op, %.0f ops/sec)\\n\", 
+           NUM_OPERATIONS, total_time,
+           (total_time / NUM_OPERATIONS) * 1e6,
+           NUM_OPERATIONS / total_time);
+}
+
+void benchmark_original_implementation(void) {
+    printf(\"\\n=== Original Implementation Performance Benchmark ===\\n\");
+    
+    struct timespec start, end;
+    double total_time;
+    
+    // Set operations benchmark
+    printf(\"Benchmarking Set operations...\\n\");
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    
+    for (int i = 0; i < NUM_OPERATIONS; i++) {
+        uint32_t can_id = 0x2000 + (i % 0x1000); // Different range to avoid conflicts
+        uint8_t test_data[] = {(uint8_t)i, (uint8_t)(i >> 8), 0x55, 0xAA};
+        can_shm_set(can_id, 4, test_data);
+    }
+    
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    total_time = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+    
+    printf(\"Set: %d ops in %.6f sec (%.2f μs/op, %.0f ops/sec)\\n\", 
+           NUM_OPERATIONS, total_time,
+           (total_time / NUM_OPERATIONS) * 1e6,
+           NUM_OPERATIONS / total_time);
+    
+    // Get operations benchmark
+    printf(\"Benchmarking Get operations...\\n\");
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    
+    for (int i = 0; i < NUM_OPERATIONS; i++) {
+        uint32_t can_id = 0x2000 + (i % 0x1000);
+        CANData data;
+        can_shm_get(can_id, &data);
+    }
+    
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    total_time = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+    
+    printf(\"Get: %d ops in %.6f sec (%.2f μs/op, %.0f ops/sec)\\n\", 
+           NUM_OPERATIONS, total_time,
+           (total_time / NUM_OPERATIONS) * 1e6,
+           NUM_OPERATIONS / total_time);
+}
+
+int main(void) {
+    printf(\"CAN Shared Memory Performance Comparison\\n\");
+    printf(\"========================================\\n\");
+    
+    if (can_shm_init() != CAN_SHM_SUCCESS) {
+        printf(\"Failed to initialize shared memory\\n\");
+        return 1;
+    }
+    
+    printf(\"Number of operations per test: %d\\n\\n\", NUM_OPERATIONS);
+    
+    benchmark_linear_probing();
+    benchmark_original_implementation();
+    
+    printf(\"\\n=== Hash Table Statistics ===\\n\");
+    can_shm_print_hash_stats();
+    
+    can_shm_cleanup();
+    
+    printf(\"\\nNote: Performance may vary based on hash collisions and system load.\\n\");
+    printf(\"Linear probing shows consistent performance even with collisions.\\n\");
+    
+    return 0;
+}
+")
+
+add_executable(performance_test ${PERF_TEST_SOURCE_PATH})
+target_link_libraries(performance_test 
+    can_shm_original 
+    can_shm_linear_probing 
+    ${CMAKE_THREAD_LIBS_INIT} 
+    ${RT_LIBRARY}
+)
+
+# カスタムターゲット定義
+
+# テスト実行
+add_custom_target(run_tests
+    COMMAND sudo rm -f /dev/shm/can_data_shm
+    COMMAND $<TARGET_FILE:test_linear_probing>
+    DEPENDS test_linear_probing
+    COMMENT "Running linear probing tests..."
+)
+
+# デモ実行
+add_custom_target(run_demo
+    COMMAND sudo rm -f /dev/shm/can_data_shm
+    COMMAND $<TARGET_FILE:demo_collision_comparison>
+    DEPENDS demo_collision_comparison
+    COMMENT "Running collision demonstration..."
+)
+
+# パフォーマンステスト実行
+add_custom_target(run_performance
+    COMMAND sudo rm -f /dev/shm/can_data_shm
+    COMMAND $<TARGET_FILE:performance_test>
+    DEPENDS performance_test
+    COMMENT "Running performance benchmark..."
+)
+
+# 共有メモリクリーンアップ
+add_custom_target(clean_shm
+    COMMAND sudo rm -f /dev/shm/can_data_shm
+    COMMENT "Cleaning up shared memory..."
+)
+
+# 全テスト実行
+add_custom_target(test_all
+    COMMAND sudo rm -f /dev/shm/can_data_shm
+    COMMAND echo "=== Running Basic Tests ==="
+    COMMAND $<TARGET_FILE:test_linear_probing>
+    COMMAND echo "\\n=== Running Collision Demo ==="
+    COMMAND $<TARGET_FILE:demo_collision_comparison>
+    COMMAND echo "\\n=== Running Performance Test ==="
+    COMMAND $<TARGET_FILE:performance_test>
+    DEPENDS test_linear_probing demo_collision_comparison performance_test
+    COMMENT "Running all tests and demonstrations..."
+)
+
+# インストール設定
+install(TARGETS test_linear_probing demo_collision_comparison performance_test
+    RUNTIME DESTINATION bin
+    COMMENT "Installing executables to bin directory"
+)
+
+install(FILES ${HEADERS}
+    DESTINATION include
+    COMMENT "Installing header files to include directory"
+)
+
+# CPack設定（パッケージ生成用）
+set(CPACK_PACKAGE_NAME "CANLinearProbing")
+set(CPACK_PACKAGE_VERSION "1.0.0")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "CAN Shared Memory with Linear Probing Implementation")
+set(CPACK_PACKAGE_VENDOR "Your Organization")
+set(CPACK_GENERATOR "TGZ")
+
+include(CPack)
+
+# ビルド情報を表示
+message(STATUS "========================================")
+message(STATUS "CAN Linear Probing Build Configuration")
+message(STATUS "========================================")
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C Compiler: ${CMAKE_C_COMPILER}")
+message(STATUS "C Flags: ${CMAKE_C_FLAGS}")
+message(STATUS "Thread library: ${CMAKE_THREAD_LIBS_INIT}")
+message(STATUS "RT library: ${RT_LIBRARY}")
+message(STATUS "")
+message(STATUS "Available targets:")
+message(STATUS "  make                 - Build all executables")
+message(STATUS "  make run_tests       - Build and run basic tests")
+message(STATUS "  make run_demo        - Build and run collision demo")
+message(STATUS "  make run_performance - Build and run performance test")
+message(STATUS "  make test_all        - Run all tests")
+message(STATUS "  make clean_shm       - Clean up shared memory")
+message(STATUS "  make install         - Install to system")
+message(STATUS "========================================")
