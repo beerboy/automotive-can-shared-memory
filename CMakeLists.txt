@@ -1,10 +1,15 @@
-cmake_minimum_required(VERSION 3.10)
-project(can_shared_memory C)
+cmake_minimum_required(VERSION 3.15)
+project(can_shared_memory C CXX)
 
 # C標準とコンパイラフラグ設定
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -g")
+
+# C++標準設定
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -g")
 
 # スレッドライブラリを探す
 find_package(Threads REQUIRED)
@@ -99,3 +104,24 @@ install(FILES
     can_shm_types.h
     DESTINATION include
 )
+
+# PTHashライブラリを追加
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/pthash)
+    add_subdirectory(pthash)
+    
+    # PTHashデモ実行ファイル
+    add_executable(pthash_simple_demo pthash_simple_demo.cpp)
+    target_link_libraries(pthash_simple_demo INTERFACE PTHASH)
+    
+    # 車載CAN IDデモ実行ファイル
+    add_executable(pthash_can_demo pthash_can_demo.cpp)
+    target_link_libraries(pthash_can_demo INTERFACE PTHASH)
+    
+    # PTHashテストターゲット
+    add_custom_target(run_pthash_tests
+        COMMAND ./pthash_simple_demo
+        COMMAND ./pthash_can_demo
+        DEPENDS pthash_simple_demo pthash_can_demo
+        COMMENT "Running PTHash demo tests"
+    )
+endif()
